@@ -1,6 +1,7 @@
 package com.trungdq.springbatch.config;
 
 import com.trungdq.springbatch.listener.SkipListener;
+import com.trungdq.springbatch.listener.SkipListenerImpl;
 import com.trungdq.springbatch.model.StudentCsv;
 import com.trungdq.springbatch.model.StudentJdbc;
 import com.trungdq.springbatch.model.StudentJson;
@@ -47,6 +48,9 @@ public class SampleJob {
     @Autowired
     private SkipListener skipListener;
 
+    @Autowired
+    private SkipListenerImpl skipListenerImpl;
+
     @Bean
     public Job readSourceJob() {
         return jobBuilderFactory.get("Read Source Job")
@@ -66,7 +70,8 @@ public class SampleJob {
                 .skip(Throwable.class)
 //                .skipLimit(1) // how many records want to skip - Integer.MAX_VALUE
                 .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
-                .listener(skipListener)
+//                .listener(skipListener)
+                .listener(skipListenerImpl)
                 .build();
 
         // like try catch exception
