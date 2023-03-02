@@ -2,17 +2,23 @@ package com.trungdq.springbatch.config;
 
 import com.trungdq.springbatch.model.StudentCsv;
 import com.trungdq.springbatch.model.StudentJdbc;
-import com.trungdq.springbatch.writer.FirstItemWriter;
+import com.trungdq.springbatch.model.StudentJson;
+import com.trungdq.springbatch.processor.FirstItemProcessor;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
+import org.springframework.batch.core.configuration.annotation.StepScope;
+import org.springframework.batch.core.step.skip.AlwaysSkipItemSkipPolicy;
 import org.springframework.batch.item.database.JdbcCursorItemReader;
 import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.batch.item.file.LineMapper;
 import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
 import org.springframework.batch.item.file.mapping.DefaultLineMapper;
 import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
+import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
+import org.springframework.batch.item.json.JsonFileItemWriter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,7 +37,7 @@ public class SampleJob {
     private StepBuilderFactory stepBuilderFactory;
 
     @Autowired
-    private FirstItemWriter firstItemWriter;
+    private FirstItemProcessor firstItemProcessor;
 
     @Autowired
     private DataSource dataSource;
@@ -45,13 +51,19 @@ public class SampleJob {
 
     private Step chunkStepForReadSource() {
         return stepBuilderFactory.get("Chunk Step")
-//                .<StudentCsv, StudentCsv>chunk(3)
-                .<StudentJdbc, StudentJdbc>chunk(3)
-//                .reader(flatFileItemReader())
-                .reader(jdbcCursorItemReader())
-//                .processor(firstItemProcessor)
-                .writer(firstItemWriter)
+                .<StudentCsv, StudentJson>chunk(3)
+                .reader(flatFileItemReader())
+                .processor(firstItemProcessor)
+                .writer(jsonFileItemWriter())
+                .faultTolerant()
+                .skip(FlatFileParseException.class)
+                .skip(NullPointerException.class)
+//                .skip(Throwable.class)
+//                .skipLimit(1) // how many records want to skip - Integer.MAX_VALUE
+                .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
                 .build();
+
+        // like try catch exception
     }
 
     private FlatFileItemReader<StudentCsv> flatFileItemReader() {
@@ -89,5 +101,12 @@ public class SampleJob {
         jdbcCursorItemReader.setRowMapper(beanPropertyRowMapper);
 
         return jdbcCursorItemReader;
+    }
+
+    @StepScope
+    @Bean
+    public JsonFileItemWriter<StudentJson>  jsonFileItemWriter() {
+        return new JsonFileItemWriter<>(new FileSystemResource("src/main/resources/students.json"),
+                new JacksonJsonObjectMarshaller<>());
     }
 }
