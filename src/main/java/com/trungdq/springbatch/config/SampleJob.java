@@ -2,33 +2,25 @@ package com.trungdq.springbatch.config;
 
 import com.trungdq.springbatch.listener.SkipListener;
 import com.trungdq.springbatch.listener.SkipListenerImpl;
-import com.trungdq.springbatch.model.StudentCsv;
-import com.trungdq.springbatch.model.StudentJdbc;
-import com.trungdq.springbatch.model.StudentJson;
+import com.trungdq.springbatch.postgresql.entity.Student;
 import com.trungdq.springbatch.processor.FirstItemProcessor;
+import com.trungdq.springbatch.reader.FirstItemReader;
+import com.trungdq.springbatch.writer.FirstItemWriter;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
 import org.springframework.batch.core.configuration.annotation.JobBuilderFactory;
 import org.springframework.batch.core.configuration.annotation.StepBuilderFactory;
-import org.springframework.batch.core.configuration.annotation.StepScope;
-import org.springframework.batch.core.step.skip.AlwaysSkipItemSkipPolicy;
-import org.springframework.batch.item.database.JdbcCursorItemReader;
-import org.springframework.batch.item.file.FlatFileItemReader;
-import org.springframework.batch.item.file.FlatFileParseException;
-import org.springframework.batch.item.file.LineMapper;
-import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
-import org.springframework.batch.item.file.mapping.DefaultLineMapper;
-import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
-import org.springframework.batch.item.json.JacksonJsonObjectMarshaller;
-import org.springframework.batch.item.json.JsonFileItemWriter;
+import org.springframework.batch.core.launch.support.RunIdIncrementer;
+import org.springframework.batch.item.database.JpaCursorItemReader;
+import org.springframework.batch.item.database.JpaItemWriter;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.orm.jpa.JpaTransactionManager;
 
+import javax.persistence.EntityManagerFactory;
 import javax.sql.DataSource;
-import java.util.List;
 
 @Configuration
 public class SampleJob {
@@ -40,10 +32,13 @@ public class SampleJob {
     private StepBuilderFactory stepBuilderFactory;
 
     @Autowired
+    private FirstItemReader firstItemReader;
+
+    @Autowired
     private FirstItemProcessor firstItemProcessor;
 
     @Autowired
-    private DataSource dataSource;
+    private FirstItemWriter firstItemWriter;
 
     @Autowired
     private SkipListener skipListener;
@@ -51,90 +46,70 @@ public class SampleJob {
     @Autowired
     private SkipListenerImpl skipListenerImpl;
 
+    @Autowired
+    @Qualifier("datasource")
+    private DataSource datasource;
+
+    @Autowired
+    @Qualifier("universitydatasource")
+    private DataSource universitydatasource;
+
+    @Autowired
+    @Qualifier("postgresdatasource")
+    private DataSource postgresdatasource;
+
+    @Autowired
+    @Qualifier("postgresqlEntityManagerFactory")
+    private EntityManagerFactory postgresqlEntityManagerFactory;
+
+    @Autowired
+    @Qualifier("mysqlEntityManagerFactory")
+    private EntityManagerFactory mysqlEntityManagerFactory;
+
+    @Autowired
+    private JpaTransactionManager jpaTransactionManager;
+
     @Bean
-    public Job readSourceJob() {
-        return jobBuilderFactory.get("Read Source Job")
-                .start(chunkStep())
+    public Job chunkJob() {
+        return jobBuilderFactory.get("Migrate Chunk Job")
+                .incrementer(new RunIdIncrementer())
+                .start(firstChunkStep())
                 .build();
     }
 
-    private Step chunkStep() {
-        return stepBuilderFactory.get("Chunk Step")
-                .<StudentCsv, StudentJson>chunk(3)
-                .reader(flatFileItemReader())
+    private Step firstChunkStep() {
+        return stepBuilderFactory.get("Migrate Chunk Step")
+                .<Student, com.trungdq.springbatch.mysql.entity.Student>chunk(3)
+                .reader(jpaCursorItemReader())
                 .processor(firstItemProcessor)
-                .writer(jsonFileItemWriter())
+                .writer(jpaItemWriter())
                 .faultTolerant()
-//                .skip(FlatFileParseException.class)
-//                .skip(NullPointerException.class)
                 .skip(Throwable.class)
-//                .skipLimit(1) // how many records want to skip - Integer.MAX_VALUE
-//                .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
-                .skipLimit(100) // don't use MAX_VALUE -> why?
+                .skipLimit(100)
                 .retryLimit(3)
                 .retry(Throwable.class)
-//                .listener(skipListener)
                 .listener(skipListenerImpl)
+                .transactionManager(jpaTransactionManager)
                 .build();
-
-        // like try catch exception
     }
 
-    private FlatFileItemReader<StudentCsv> flatFileItemReader() {
-        FlatFileItemReader<StudentCsv> flatFileItemReader = new FlatFileItemReader<>();
+    public JpaCursorItemReader<Student> jpaCursorItemReader() {
+        JpaCursorItemReader<Student> jpaCursorItemReader =
+                new JpaCursorItemReader<Student>();
 
-        flatFileItemReader.setResource(new FileSystemResource("src/main/resources/students.csv"));
-        flatFileItemReader.setLineMapper(lineMapper());
-        flatFileItemReader.setLinesToSkip(1);
+        jpaCursorItemReader.setEntityManagerFactory(postgresqlEntityManagerFactory);
 
-        return flatFileItemReader;
+        jpaCursorItemReader.setQueryString("From Student");
+
+        return jpaCursorItemReader;
     }
 
-    private LineMapper<StudentCsv> lineMapper() {
-        DelimitedLineTokenizer lineTokenizer = new DelimitedLineTokenizer();
-        lineTokenizer.setNames("ID", "First Name", "Last Name", "Email");
+    public JpaItemWriter<com.trungdq.springbatch.mysql.entity.Student> jpaItemWriter() {
+        JpaItemWriter<com.trungdq.springbatch.mysql.entity.Student> jpaItemWriter =
+                new JpaItemWriter<>();
 
-        BeanWrapperFieldSetMapper<StudentCsv> fieldSetMapper = new BeanWrapperFieldSetMapper<>();
-        fieldSetMapper.setTargetType(StudentCsv.class);
+        jpaItemWriter.setEntityManagerFactory(mysqlEntityManagerFactory);
 
-        DefaultLineMapper<StudentCsv> defaultLineMapper = new DefaultLineMapper<>();
-        defaultLineMapper.setLineTokenizer(lineTokenizer);
-        defaultLineMapper.setFieldSetMapper(fieldSetMapper);
-
-        return defaultLineMapper;
-    }
-
-    private JdbcCursorItemReader<StudentJdbc> jdbcCursorItemReader() {
-        JdbcCursorItemReader<StudentJdbc> jdbcCursorItemReader = new JdbcCursorItemReader<>();
-
-        jdbcCursorItemReader.setDataSource(dataSource);
-        jdbcCursorItemReader.setSql("SELECT id, first_name as firstName, last_name as lastName, email FROM student");
-
-        BeanPropertyRowMapper<StudentJdbc> beanPropertyRowMapper = new BeanPropertyRowMapper<>();
-        beanPropertyRowMapper.setMappedClass(StudentJdbc.class);
-        jdbcCursorItemReader.setRowMapper(beanPropertyRowMapper);
-
-        return jdbcCursorItemReader;
-    }
-
-    @StepScope
-    @Bean
-    public JsonFileItemWriter<StudentJson>  jsonFileItemWriter() {
-        return new JsonFileItemWriter<>(
-                new FileSystemResource("src/main/resources/students.json"),
-                new JacksonJsonObjectMarshaller<>()) {
-            @Override
-            public String doWrite(List<? extends StudentJson> items) {
-                items.forEach(item -> {
-                    if (3 == item.getId()) {
-                        System.out.println("Inside JsonFileItemWriter");
-                        throw new NullPointerException();
-                    }
-                });
-                return super.doWrite(items);
-            }
-        };
-//        return new JsonFileItemWriter<>(new FileSystemResource("src/main/resources/students.json"),
-//                new JacksonJsonObjectMarshaller<>());
+        return jpaItemWriter;
     }
 }
