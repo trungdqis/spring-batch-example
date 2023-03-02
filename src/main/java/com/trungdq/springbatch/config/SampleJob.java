@@ -1,5 +1,6 @@
 package com.trungdq.springbatch.config;
 
+import com.trungdq.springbatch.listener.SkipListener;
 import com.trungdq.springbatch.model.StudentCsv;
 import com.trungdq.springbatch.model.StudentJdbc;
 import com.trungdq.springbatch.model.StudentJson;
@@ -42,25 +43,29 @@ public class SampleJob {
     @Autowired
     private DataSource dataSource;
 
+    @Autowired
+    private SkipListener skipListener;
+
     @Bean
     public Job readSourceJob() {
         return jobBuilderFactory.get("Read Source Job")
-                .start(chunkStepForReadSource())
+                .start(chunkStep())
                 .build();
     }
 
-    private Step chunkStepForReadSource() {
+    private Step chunkStep() {
         return stepBuilderFactory.get("Chunk Step")
                 .<StudentCsv, StudentJson>chunk(3)
                 .reader(flatFileItemReader())
                 .processor(firstItemProcessor)
                 .writer(jsonFileItemWriter())
                 .faultTolerant()
-                .skip(FlatFileParseException.class)
-                .skip(NullPointerException.class)
-//                .skip(Throwable.class)
+//                .skip(FlatFileParseException.class)
+//                .skip(NullPointerException.class)
+                .skip(Throwable.class)
 //                .skipLimit(1) // how many records want to skip - Integer.MAX_VALUE
                 .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
+                .listener(skipListener)
                 .build();
 
         // like try catch exception
