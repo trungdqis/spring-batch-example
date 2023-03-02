@@ -27,6 +27,7 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.jdbc.core.BeanPropertyRowMapper;
 
 import javax.sql.DataSource;
+import java.util.List;
 
 @Configuration
 public class SampleJob {
@@ -111,7 +112,20 @@ public class SampleJob {
     @StepScope
     @Bean
     public JsonFileItemWriter<StudentJson>  jsonFileItemWriter() {
-        return new JsonFileItemWriter<>(new FileSystemResource("src/main/resources/students.json"),
-                new JacksonJsonObjectMarshaller<>());
+        return new JsonFileItemWriter<>(
+                new FileSystemResource("src/main/resources/students.json"),
+                new JacksonJsonObjectMarshaller<>()) {
+            @Override
+            public String doWrite(List<? extends StudentJson> items) {
+                items.forEach(item -> {
+                    if (3 == item.getId()) {
+                        throw new NullPointerException();
+                    }
+                });
+                return super.doWrite(items);
+            }
+        };
+//        return new JsonFileItemWriter<>(new FileSystemResource("src/main/resources/students.json"),
+//                new JacksonJsonObjectMarshaller<>());
     }
 }
