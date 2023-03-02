@@ -69,7 +69,10 @@ public class SampleJob {
 //                .skip(NullPointerException.class)
                 .skip(Throwable.class)
 //                .skipLimit(1) // how many records want to skip - Integer.MAX_VALUE
-                .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
+//                .skipPolicy(new AlwaysSkipItemSkipPolicy()) // the other one -> skipping all
+                .skipLimit(100) // don't use MAX_VALUE -> why?
+                .retryLimit(3)
+                .retry(Throwable.class)
 //                .listener(skipListener)
                 .listener(skipListenerImpl)
                 .build();
@@ -124,6 +127,7 @@ public class SampleJob {
             public String doWrite(List<? extends StudentJson> items) {
                 items.forEach(item -> {
                     if (3 == item.getId()) {
+                        System.out.println("Inside JsonFileItemWriter");
                         throw new NullPointerException();
                     }
                 });
