@@ -1,5 +1,7 @@
 package com.trungdq.springbatch.listener;
 
+import com.trungdq.springbatch.model.StudentCsv;
+import org.springframework.batch.core.annotation.OnSkipInProcess;
 import org.springframework.batch.core.annotation.OnSkipInRead;
 import org.springframework.batch.item.file.FlatFileParseException;
 import org.springframework.stereotype.Component;
@@ -17,6 +19,12 @@ public class SkipListener {
             createFile("D:\\MyStack\\spring-batch-example\\Chunk Job\\Chunk Step\\reader\\SkipInRead.txt",
                     ((FlatFileParseException) throwable).getInput());
         }
+    }
+
+    @OnSkipInProcess
+    public void skipInProcess(StudentCsv studentCsv, Throwable throwable) {
+        createFile("D:\\MyStack\\spring-batch-example\\Chunk Job\\Chunk Step\\processor\\SkipInProcess.txt",
+                studentCsv.toString());
     }
 
     private void createFile(String filePath, String data) {

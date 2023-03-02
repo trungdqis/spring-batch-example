@@ -12,6 +12,10 @@ public class FirstItemProcessor implements ItemProcessor<StudentCsv, StudentJson
     @Override
     public StudentJson process(StudentCsv item) throws Exception {
         System.out.println("Inside Item Processor");
+
+        if (6 == item.getId()) {
+            throw new NullPointerException();
+        }
         StudentJson studentJson = new StudentJson();
         studentJson.setId(item.getId());
         studentJson.setFirstName(item.getFirstName());
